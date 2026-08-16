@@ -1,15 +1,13 @@
 import streamlit as st
 import numpy as np
-from bokeh.plotting import figure
-from bokeh.models import ColumnDataSource, CustomJS
-from streamlit_bokeh_events import streamlit_bokeh_events
+import plotly.express as px
 
 st.set_page_config(page_title="Mozaika 10x42", layout="centered")
 
 ROWS, COLS = 42, 10
 TOTAL_BLACK = 110
 
-# 1. Inicjalizacja stanu mozaiki
+# 1. Inicjalizacja stanu mozaiki (rozproszona siatka)
 if "grid" not in st.session_state:
     indices = [(r, c) for r in range(ROWS) for c in range(COLS)]
     grid = np.zeros((ROWS, COLS), dtype=int)
@@ -42,70 +40,39 @@ col2.metric("⬜ Białe", f"{current_white} / 310")
 
 st.divider()
 
-# 2. Przygotowanie danych do rysowania siatki
-x_coords = []
-y_coords = []
-colors = []
-row_idx = []
-col_idx = []
-
-for r in range(ROWS):
-    for c in range(COLS):
-        # Bokeh rysuje od dołu do góry, więc odwracamy wiersze
-        x_coords.append(c + 0.5)
-        y_coords.append((ROWS - 1 - r) + 0.5)
-        colors.append("#000000" if st.session_state.grid[r, c] == 1 else "#ffffff")
-        row_idx.append(r)
-        col_idx.append(c)
-
-source = ColumnDataSource(data=dict(
-    x=x_coords,
-    y=y_coords,
-    color=colors,
-    row=row_idx,
-    col=col_idx
-))
-
-# 3. Tworzenie płótna i rysowanie dokładnie identycznego obrazka
-p = figure(
-    x_range=(0, COLS),
-    y_range=(0, ROWS),
-    tools="tap",
-    toolbar_location=None,
-    width=320,
-    height=1300,
-    match_aspect=True
+# 2. Tworzenie interaktywnej mozaiki Plotly
+fig = px.imshow(
+    st.session_state.grid,
+    color_continuous_scale=[[0, 'white'], [1, 'black']],
+    aspect="equal"
 )
 
-rects = p.rect(
-    x='x', y='y', width=0.98, height=0.98,
-    fill_color='color', line_color='#777777', line_width=1,
-    source=source
+# Ukrywanie osi, dodanie siatki oddzielającej kwadraty
+fig.update_xaxes(showticklabels=False, showgrid=True, gridwidth=1, gridcolor='gray', dtick=1)
+fig.update_yaxes(showticklabels=False, showgrid=True, gridwidth=1, gridcolor='gray', dtick=1)
+
+fig.update_layout(
+    coloraxis_showscale=False,
+    margin=dict(l=5, r=5, t=5, b=5),
+    height=1100,
+    dragmode=False
 )
 
-# Skrypt przechwytujący kliknięcie na telefonie
-source.selected.js_on_change('indices', CustomJS(args=dict(source=source), code="""
-    const inds = cb_obj.indices;
-    if (inds.length == 0) return;
-    const idx = inds[0];
-    const r = source.data['row'][idx];
-    const c = source.data['col'][idx];
-    document.dispatchEvent(new CustomEvent("SQUARE_CLICKED", {detail: {row: r, col: c}}));
-"""))
-
-p.axis.visible = False
-p.grid.grid_line_color = None
-
-# 4. Obsługa kliknięcia w Streamlit
-result = streamlit_bokeh_events(
-    p,
-    events="SQUARE_CLICKED",
-    key="bokeh_grid",
-    refresh_on_update=False
+# 3. Wyświetlenie obrazu i przechwycenie kliknięcia na telefonie
+selected_point = st.plotly_chart(
+    fig, 
+    use_container_width=True, 
+    on_select="rerun", 
+    selection_mode="points"
 )
 
-if result and "SQUARE_CLICKED" in result:
-    data = result.get("SQUARE_CLICKED")
-    r, c = data["row"], data["col"]
-    st.session_state.grid[r, c] = 1 - st.session_state.grid[r, c]
-    st.rerun()
+# 4. Obsługa zmiany koloru po kliknięciu
+if selected_point and "selection" in selected_point and "points" in selected_point["selection"]:
+    points = selected_point["selection"]["points"]
+    if len(points) > 0:
+        pt = points[0]
+        r, c = pt["y"], pt["x"]
+        
+        # Zmiana stanu wybranego pola
+        st.session_state.grid[r, c] = 1 - st.session_state.grid[r, c]
+        st.rerun()
