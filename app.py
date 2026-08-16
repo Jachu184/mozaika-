@@ -6,9 +6,9 @@ st.set_page_config(page_title="Mozaika 10x42", layout="centered")
 ROWS, COLS = 42, 10
 TOTAL_BLACK = 110
 
-# 1. Inicjalizacja stanu mozaiki (stały Seed gwarantuje jednorazowe wygenerowanie)
+# 1. Tworzenie stałej siatki początkowej (tylko raz)
 if "grid" not in st.session_state:
-    np.random.seed(42)  # Zapewnia stały układ początkowy
+    np.random.seed(42)
     indices = [(r, c) for r in range(ROWS) for c in range(COLS)]
     grid = np.zeros((ROWS, COLS), dtype=int)
     np.random.shuffle(indices)
@@ -29,65 +29,100 @@ if "grid" not in st.session_state:
             
     st.session_state.grid = grid
 
-# 2. Zmiana koloru wybranego pola po kliknięciu
-if "cell" in st.query_params:
-    try:
-        r, c = map(int, st.query_params["cell"].split("_"))
-        st.session_state.grid[r, c] = 1 - st.session_state.grid[r, c]
-    except Exception:
-        pass
-    st.query_params.clear()
-    st.rerun()
+# 2. Aktualizacja macierzy, jeśli przyszła zmiana z JS
+if "last_toggle" in st.session_state and st.session_state.last_toggle:
+    r, c = st.session_state.last_toggle
+    st.session_state.grid[r, c] = 1 - st.session_state.grid[r, c]
+    st.session_state.last_toggle = None
 
-# Statystyki
+st.title("🧩 Mozaika 10x42")
+
 current_black = int(np.sum(st.session_state.grid))
 current_white = (ROWS * COLS) - current_black
 
-st.markdown(f"### 🧩 Mozaika 10x42 | ⬛ {current_black} / 110 | ⬜ {current_white}")
+col1, col2 = st.columns(2)
+col1.metric("⬛ Czarne", f"{current_black} / 110")
+col2.metric("⬜ Białe", f"{current_white} / 310")
 
-# 3. Wygenerowanie siatki jako czysty obraz HTML/CSS
-grid_flat = st.session_state.grid.flatten()
-cells_html = ""
+st.divider()
 
-for idx, val in enumerate(grid_flat):
-    r = idx // COLS
-    c = idx % COLS
-    bg_color = "#000000" if val == 1 else "#ffffff"
-    cells_html += f'<a href="?cell={r}_{c}" target="_self" class="square" style="background-color: {bg_color};"></a>'
+# 3. Interaktywna aplikacja w czystym HTML/JS (bez przekierowań w URL)
+grid_list = st.session_state.grid.tolist()
 
-full_html = f"""
+html_app = f"""
+<!DOCTYPE html>
+<html>
+<head>
 <style>
-    .block-container {{
-        padding-top: 1rem !important;
-        padding-bottom: 1rem !important;
-        padding-left: 0.5rem !important;
-        padding-right: 0.5rem !important;
+    body {{
+        margin: 0;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        background-color: transparent;
     }}
-    
     .mosaic-grid {{
         display: grid;
-        grid-template-columns: repeat(10, 1fr);
+        grid-template-columns: repeat({COLS}, 1fr);
         width: 100%;
         max-width: 360px;
-        margin: 0 auto;
-        background-color: #888888;
+        background-color: #777777;
         gap: 1px;
         border: 2px solid #333333;
     }}
-    
     .square {{
-        display: block;
         width: 100%;
         aspect-ratio: 1 / 1;
         box-sizing: border-box;
+        cursor: pointer;
         -webkit-tap-highlight-color: transparent;
     }}
+    .black {{ background-color: #000000; }}
+    .white {{ background-color: #ffffff; }}
 </style>
+</head>
+<body>
 
-<div class="mosaic-grid">
-    {cells_html}
-</div>
+<div class="mosaic-grid" id="grid"></div>
+
+<script>
+    const gridData = {grid_list};
+    const container = document.getElementById('grid');
+
+    gridData.forEach((row, r) => {{
+        row.forEach((val, c) => {{
+            const sq = document.createElement('div');
+            sq.className = 'square ' + (val === 1 ? 'black' : 'white');
+            
+            sq.addEventListener('click', () => {{
+                // Natychmiastowa zmiana koloru wizualnie na ekranie
+                if (sq.classList.contains('black')) {{
+                    sq.className = 'square white';
+                }} else {{
+                    sq.className = 'square black';
+                }}
+                
+                // Przekazanie bezpiecznej informacji do Pythona bez zmieniania URL
+                window.parent.postMessage({{
+                    isStreamlit: true,
+                    type: "streamlit:setComponentValue",
+                    value: [r, c]
+                }}, "*");
+            }});
+
+            container.appendChild(sq);
+        }});
+    }});
+</script>
+
+</body>
+</html>
 """
 
-st.markdown(full_html, unsafe_allow_html=True)
-        
+# Renderowanie komponentu
+clicked = st.components.v1.html(html_app, height=1350)
+
+# Jeśli kliknięto w pole, zapisujemy zmianę i przeliczamy statystyki
+if clicked and isinstance(clicked, list) and len(clicked) == 2:
+    st.session_state.last_toggle = clicked
+    st.rerun()
