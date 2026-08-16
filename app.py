@@ -6,7 +6,7 @@ st.set_page_config(page_title="Mozaika 10x42", layout="centered")
 ROWS, COLS = 42, 10
 TOTAL_BLACK = 110
 
-# 1. Tworzenie stałej siatki początkowej (tylko przy pierwszym uruchomieniu)
+# 1. Tworzenie stałej siatki początkowej
 if "grid" not in st.session_state:
     np.random.seed(42)
     indices = [(r, c) for r in range(ROWS) for c in range(COLS)]
@@ -31,7 +31,7 @@ if "grid" not in st.session_state:
 
 st.title("🧩 Mozaika 10x42")
 
-# 2. Tworzenie interaktywnego komponentu HTML z dynamicznym licznikiem w JS
+# 2. Wygenerowanie interaktywnego komponentu z automatycznym dopasowaniem wysokości
 grid_list = st.session_state.grid.tolist()
 
 html_app = f"""
@@ -39,12 +39,13 @@ html_app = f"""
 <html>
 <head>
 <style>
-    body {{
+    html, body {{
         margin: 0;
         padding: 0;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         color: white;
         background-color: transparent;
+        overflow: hidden;
     }}
     .stats-container {{
         display: flex;
@@ -72,7 +73,7 @@ html_app = f"""
         grid-template-columns: repeat({COLS}, 1fr);
         width: 100%;
         max-width: 360px;
-        margin: 0 auto;
+        margin: 0 auto 20px auto;
         background-color: #777777;
         gap: 1px;
         border: 2px solid #333333;
@@ -90,18 +91,20 @@ html_app = f"""
 </head>
 <body>
 
-<div class="stats-container">
-    <div class="stat-box">
-        <div class="stat-title">⬛ Czarne kwadraty</div>
-        <div class="stat-value" id="black-count">110 / 110</div>
+<div id="wrapper">
+    <div class="stats-container">
+        <div class="stat-box">
+            <div class="stat-title">⬛ Czarne kwadraty</div>
+            <div class="stat-value" id="black-count">110 / 110</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-title">⬜ Białe kwadraty</div>
+            <div class="stat-value" id="white-count">310 / 310</div>
+        </div>
     </div>
-    <div class="stat-box">
-        <div class="stat-title">⬜ Białe kwadraty</div>
-        <div class="stat-value" id="white-count">310 / 310</div>
-    </div>
-</div>
 
-<div class="mosaic-grid" id="grid"></div>
+    <div class="mosaic-grid" id="grid"></div>
+</div>
 
 <script>
     const gridData = {grid_list};
@@ -112,7 +115,6 @@ html_app = f"""
     let currentBlack = 0;
     const totalSquares = {ROWS * COLS};
 
-    // Zliczanie początkowe
     gridData.forEach(row => {{
         row.forEach(val => {{
             if (val === 1) currentBlack++;
@@ -126,7 +128,6 @@ html_app = f"""
 
     updateStats();
 
-    // Generowanie siatki
     gridData.forEach((row, r) => {{
         row.forEach((val, c) => {{
             const sq = document.createElement('div');
@@ -146,10 +147,25 @@ html_app = f"""
             container.appendChild(sq);
         }});
     }});
+
+    // Automatyczne przekazanie wysokości ramki do Streamlit
+    function sendHeight() {{
+        const height = document.getElementById('wrapper').scrollHeight + 30;
+        window.parent.postMessage({{
+            isStreamlit: true,
+            type: "streamlit:setFrameHeight",
+            height: height
+        }}, "*");
+    }}
+
+    window.addEventListener('load', sendHeight);
+    window.addEventListener('resize', sendHeight);
+    setTimeout(sendHeight, 500);
 </script>
 
 </body>
 </html>
 """
 
-st.components.v1.html(html_app, height=1450)
+# Zwiększony sztywny bufor wysokości dla urządzeń mobilnych
+st.components.v1.html(html_app, height=1800, scrolling=False)
