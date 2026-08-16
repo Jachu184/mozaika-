@@ -6,7 +6,7 @@ st.set_page_config(page_title="Mozaika 10x42", layout="centered")
 ROWS, COLS = 42, 10
 TOTAL_BLACK = 110
 
-# 1. Inicjalizacja stanu mozaiki
+# 1. Inicjalizacja stanu mozaiki (rozproszona siatka)
 if "grid" not in st.session_state:
     indices = [(r, c) for r in range(ROWS) for c in range(COLS)]
     grid = np.zeros((ROWS, COLS), dtype=int)
@@ -28,8 +28,14 @@ if "grid" not in st.session_state:
             
     st.session_state.grid = grid
 
-def toggle_square(r, c):
-    st.session_state.grid[r, c] = 1 - st.session_state.grid[r, c]
+# Zmiana koloru pola
+if "click_event" in st.session_state and st.session_state.click_event:
+    try:
+        r, c = map(int, st.session_state.click_event.split("_"))
+        st.session_state.grid[r, c] = 1 - st.session_state.grid[r, c]
+        st.session_state.click_event = None
+    except:
+        pass
 
 st.title("🧩 Mozaika 10x42")
 
@@ -42,59 +48,51 @@ col2.metric("⬜ Białe", f"{current_white} / 310")
 
 st.divider()
 
-# 2. Wymuszenie poziomego układu 10 kolumn na urządzeniach mobilnych (CSS)
-st.markdown("""
-    <style>
-    /* Zapobieganie zawijaniu kolumn w Streamlit na wąskich ekranach */
-    [data-testid="stHorizontalBlock"] {
-        flex-wrap: nowrap !important;
-        gap: 1px !important;
-    }
-    
-    [data-testid="column"] {
-        width: 10% !important;
-        flex: 1 1 calc(10% - 1px) !important;
-        min-width: 0px !important;
-    }
-    
-    /* Kwadratowe, dopasowane do ekranu przyciski bez marginesów */
-    div.stButton > button {
-        width: 100% !important;
-        height: 24px !important;
-        min-height: 24px !important;
-        padding: 0px !important;
-        margin: 0px !important;
-        border: 1px solid #777 !important;
-        border-radius: 0px !important;
-        font-size: 8px !important;
-        line-height: 1 !important;
-    }
-    
-    /* Dedykowane kolory przycisków */
-    .st-black-btn > button {
-        background-color: #000000 !important;
-        color: #000000 !important;
-    }
-    
-    .st-white-btn > button {
-        background-color: #ffffff !important;
-        color: #ffffff !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# 2. Generowanie obrazu mozaiki jako interaktywnej siatki SVG
+cell_size = 30
+width = COLS * cell_size
+height = ROWS * cell_size
 
-# 3. Generowanie ścisłej siatki 10x42
+svg_cells = []
 for r in range(ROWS):
-    cols = st.columns(COLS, gap="small")
     for c in range(COLS):
-        is_black = st.session_state.grid[r, c] == 1
-        
-        # Przypisanie odpowiedniej klasy kolorystycznej
-        btn_container = cols[c].container()
-        
-        cols[c].button(
-            label=" ", 
-            key=f"btn_{r}_{c}", 
-            on_click=toggle_square, 
-            args=(r, c)
+        color = "#000000" if st.session_state.grid[r, c] == 1 else "#ffffff"
+        x = c * cell_size
+        y = r * cell_size
+        svg_cells.append(
+            f'<rect x="{x}" y="{y}" width="{cell_size}" height="{cell_size}" '
+            f'fill="{color}" stroke="#777777" stroke-width="1" '
+            f'onclick="window.parent.postMessage({{type: \'streamlit:setComponentValue\', value: \'{r}_{c}\'}}, \'*\')" '
+            f'style="cursor: pointer;"/>'
         )
+
+svg_code = f'''
+<div style="display: flex; justify-content: center; width: 100%;">
+    <svg width="100%" viewBox="0 0 {width} {height}" style="max-width: 350px; height: auto; border: 2px solid #333;">
+        {"".join(svg_cells)}
+    </svg>
+</div>
+'''
+
+# 3. Wyświetlenie siatki dokładnie jak na grafice
+st.components.v1.html(
+    f'''
+    <div id="svg-container">
+        {svg_code}
+    </div>
+    <script>
+    const rects = document.querySelectorAll('rect');
+    rects.forEach(rect => {{
+        rect.addEventListener('click', (e) => {{
+            const id = e.target.getAttribute('onclick').match(/'([^']+)'/)[1];
+            window.parent.postMessage({{
+                isStreamlit: true,
+                type: "streamlit:setComponentValue",
+                value: id
+            }}, "*");
+        }});
+    }});
+    </script>
+    ''',
+    height=1300
+    )
