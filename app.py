@@ -1,12 +1,12 @@
 import streamlit as st
 import numpy as np
 
-st.set_page_config(page_title="Interaktywna Mozaika", layout="centered")
+st.set_page_config(page_title="Mozaika 10x42", layout="centered")
 
 ROWS, COLS = 42, 10
 TOTAL_BLACK = 110
 
-# Inicjalizacja stanu mozaiki przy pierwszym uruchomieniu
+# 1. Inicjalizacja stanu mozaiki
 if "grid" not in st.session_state:
     indices = [(r, c) for r in range(ROWS) for c in range(COLS)]
     grid = np.zeros((ROWS, COLS), dtype=int)
@@ -32,7 +32,6 @@ def toggle_square(r, c):
     st.session_state.grid[r, c] = 1 - st.session_state.grid[r, c]
 
 st.title("🧩 Mozaika 10x42")
-st.write("Kliknij w kwadrat, aby zmienić jego kolor.")
 
 current_black = int(np.sum(st.session_state.grid))
 current_white = (ROWS * COLS) - current_black
@@ -43,30 +42,59 @@ col2.metric("⬜ Białe", f"{current_white} / 310")
 
 st.divider()
 
-# CSS dla ładnego wyglądu przycisków na telefonie
+# 2. Wymuszenie poziomego układu 10 kolumn na urządzeniach mobilnych (CSS)
 st.markdown("""
     <style>
+    /* Zapobieganie zawijaniu kolumn w Streamlit na wąskich ekranach */
+    [data-testid="stHorizontalBlock"] {
+        flex-wrap: nowrap !important;
+        gap: 1px !important;
+    }
+    
+    [data-testid="column"] {
+        width: 10% !important;
+        flex: 1 1 calc(10% - 1px) !important;
+        min-width: 0px !important;
+    }
+    
+    /* Kwadratowe, dopasowane do ekranu przyciski bez marginesów */
     div.stButton > button {
         width: 100% !important;
-        height: 26px !important;
+        height: 24px !important;
+        min-height: 24px !important;
         padding: 0px !important;
         margin: 0px !important;
         border: 1px solid #777 !important;
-        border-radius: 2px !important;
+        border-radius: 0px !important;
+        font-size: 8px !important;
+        line-height: 1 !important;
+    }
+    
+    /* Dedykowane kolory przycisków */
+    .st-black-btn > button {
+        background-color: #000000 !important;
+        color: #000000 !important;
+    }
+    
+    .st-white-btn > button {
+        background-color: #ffffff !important;
+        color: #ffffff !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# Wyświetlanie siatki
+# 3. Generowanie ścisłej siatki 10x42
 for r in range(ROWS):
     cols = st.columns(COLS, gap="small")
     for c in range(COLS):
         is_black = st.session_state.grid[r, c] == 1
-        # Emojis reprezentujące kolor w nagłówku lub wyglądzie
+        
+        # Przypisanie odpowiedniej klasy kolorystycznej
+        btn_container = cols[c].container()
+        
         cols[c].button(
-            label="⬛" if is_black else "⬜", 
+            label=" ", 
             key=f"btn_{r}_{c}", 
             on_click=toggle_square, 
             args=(r, c)
-      )
-      
+        )
