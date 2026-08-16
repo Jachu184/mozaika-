@@ -28,12 +28,6 @@ if "grid" not in st.session_state:
             
     st.session_state.grid = grid
 
-# 2. Przechwycenie kliknięcia z komunikatu JavaScript
-if "last_clicked" in st.session_state and st.session_state.last_clicked:
-    r, c = st.session_state.last_clicked
-    st.session_state.grid[r, c] = 1 - st.session_state.grid[r, c]
-    st.session_state.last_clicked = None
-
 st.title("🧩 Mozaika 10x42")
 
 current_black = int(np.sum(st.session_state.grid))
@@ -45,7 +39,7 @@ col2.metric("⬜ Białe", f"{current_white} / 310")
 
 st.divider()
 
-# 3. Wygenerowanie siatki w czystym HTML/CSS z natywną obsługą dotyku
+# 2. Wygenerowanie interaktywnej siatki HTML/JS
 grid_data = st.session_state.grid.tolist()
 
 html_code = f"""
@@ -60,6 +54,7 @@ html_code = f"""
         justify-content: center;
         background-color: transparent;
         user-select: none;
+        -webkit-user-select: none;
     }}
     .grid-container {{
         display: grid;
@@ -72,7 +67,7 @@ html_code = f"""
     }}
     .cell {{
         width: 100%;
-        padding-top: 100%; /* Wymuszenie idealnego kwadratu */
+        padding-top: 100%;
         position: relative;
         cursor: pointer;
     }}
@@ -86,10 +81,17 @@ html_code = f"""
 </head>
 <body>
 
-<div class="grid-container" id="mosaic">
-</div>
+<div class="grid-container" id="mosaic"></div>
 
 <script>
+    function sendToStreamlit(value) {{
+        window.parent.postMessage({{
+            isStreamlit: true,
+            type: "streamlit:setComponentValue",
+            value: value
+        }}, "*");
+    }}
+
     const gridData = {grid_data};
     const container = document.getElementById('mosaic');
 
@@ -102,13 +104,9 @@ html_code = f"""
             inner.className = 'cell-inner ' + (val === 1 ? 'black' : 'white');
             cell.appendChild(inner);
 
-            // Obsługa kliknięcia/dotknięcia palcem
+            // Reakcja na dotyk/kliknięcie
             cell.addEventListener('click', () => {{
-                // Wysyłamy informację do Streamlita
-                window.parent.postMessage({{
-                    type: 'streamlit:setComponentValue',
-                    value: [rIdx, cIdx]
-                }}, '*');
+                sendToStreamlit({{r: rIdx, c: cIdx}});
             }});
 
             container.appendChild(cell);
@@ -120,11 +118,11 @@ html_code = f"""
 </html>
 """
 
-# Renderowanie interaktywnej mozaiki
-component_value = st.components.v1.html(html_code, height=1350)
+# Renderowanie komponentu HTML
+clicked_cell = st.components.v1.html(html_code, height=1400)
 
-# Jeśli kliknięto w pole, zapisz dane i odśwież
-if component_value:
-    st.session_state.last_clicked = component_value
+# 3. Bezpieczna obsługa zmiany koloru po kliknięciu
+if isinstance(clicked_cell, dict) and "r" in clicked_cell and "c" in clicked_cell:
+    r, c = clicked_cell["r"], clicked_cell["c"]
+    st.session_state.grid[r, c] = 1 - st.session_state.grid[r, c]
     st.rerun()
-        
