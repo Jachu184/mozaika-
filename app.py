@@ -1,14 +1,13 @@
 import streamlit as st
 import numpy as np
-import pandas as pd
 
 st.set_page_config(page_title="Mozaika 10x42", layout="centered")
 
 ROWS, COLS = 42, 10
 TOTAL_BLACK = 110
 
-# 1. Inicjalizacja stanu mozaiki (0 = biały ⬜, 1 = czarny ⬛)
-if "grid_array" not in st.session_state:
+# 1. Inicjalizacja stanu mozaiki
+if "grid" not in st.session_state:
     indices = [(r, c) for r in range(ROWS) for c in range(COLS)]
     grid = np.zeros((ROWS, COLS), dtype=int)
     np.random.shuffle(indices)
@@ -27,60 +26,70 @@ if "grid_array" not in st.session_state:
             grid[r, c] = 1
             placed += 1
             
-    st.session_state.grid_array = grid
+    st.session_state.grid = grid
 
-st.title("🧩 Mozaika 10x42")
+# 2. Obsługa kliknięcia z adresu URL
+if "cell" in st.query_params:
+    try:
+        r, c = map(int, st.query_params["cell"].split("_"))
+        st.session_state.grid[r, c] = 1 - st.session_state.grid[r, c]
+    except Exception:
+        pass
+    st.query_params.clear()
+    st.rerun()
 
-current_black = int(np.sum(st.session_state.grid_array))
+# Statystyki
+current_black = int(np.sum(st.session_state.grid))
 current_white = (ROWS * COLS) - current_black
 
-col1, col2 = st.columns(2)
-col1.metric("⬛ Czarne", f"{current_black} / 110")
-col2.metric("⬜ Białe", f"{current_white} / 310")
+st.markdown(f"### 🧩 Mozaika 10x42 | ⬛ {current_black} / 110 | ⬜ {current_white}")
 
-st.caption("Wybierz opcję z listy w komórce, aby zmienić jej kolor (⬛/⬜).")
+# 3. Wygenerowanie pełnej siatki jako czysty obraz HTML/CSS
+grid_flat = st.session_state.grid.flatten()
+cells_html = ""
 
-# 2. Przygotowanie danych do wyświetlenia jako znaki
-display_grid = np.where(st.session_state.grid_array == 1, "⬛", "⬜")
-df_display = pd.DataFrame(display_grid, columns=[f"C{i+1}" for i in range(COLS)])
+for idx, val in enumerate(grid_flat):
+    r = idx // COLS
+    c = idx % COLS
+    bg_color = "#000000" if val == 1 else "#ffffff"
+    cells_html += f'<a href="?cell={r}_{c}" target="_self" class="square" style="background-color: {bg_color};"></a>'
 
-# 3. CSS zmniejszający komórki, by 10 kolumn idealnie weszło na ekran telefonu
-st.markdown("""
-    <style>
-    /* Wymuszenie wąskich kolumn w tabeli */
-    [data-testid="stDataFrame"] div[role="gridcell"] {
-        padding: 0px !important;
-        font-size: 14px !important;
-        text-align: center !important;
-    }
-    [data-testid="stDataFrame"] {
-        width: 100% !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
+full_html = f"""
+<style>
+    /* Usuwamy wszystkie niepotrzebne marginesy Streamlita */
+    .block-container {{
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+    }}
+    
+    /* Prawdziwa siatka 10-kolumnowa bez ramek i tabel */
+    .mosaic-grid {{
+        display: grid;
+        grid-template-columns: repeat(10, 1fr);
+        width: 100%;
+        max-width: 360px;
+        margin: 0 auto;
+        background-color: #888888;
+        gap: 1px;
+        border: 2px solid #333333;
+    }}
+    
+    /* Idealnie kwadratowe komórki */
+    .square {{
+        display: block;
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+    }}
+</style>
 
-# 4. Edytowalna tabela ze składką wyboru koloru
-column_config = {
-    col: st.column_config.SelectboxColumn(
-        label=col,
-        options=["⬛", "⬜"],
-        required=True,
-        width="small"
-    ) for col in df_display.columns
-}
+<div class="mosaic-grid">
+    {cells_html}
+</div>
+"""
 
-edited_df = st.data_editor(
-    df_display,
-    column_config=column_config,
-    use_container_width=True,
-    hide_index=True,
-    height=1200,
-    key="emoji_editor"
-)
-
-# 5. Aktualizacja stanu aplikacji
-new_grid = np.where(edited_df.to_numpy() == "⬛", 1, 0)
-if not np.array_equal(new_grid, st.session_state.grid_array):
-    st.session_state.grid_array = new_grid
-    st.rerun()
-        
+st.markdown(full_html, unsafe_allow_html=True)
+            
