@@ -6,8 +6,9 @@ st.set_page_config(page_title="Mozaika 10x42", layout="centered")
 ROWS, COLS = 42, 10
 TOTAL_BLACK = 110
 
-# 1. Inicjalizacja stanu mozaiki
+# 1. Inicjalizacja stanu mozaiki (stały Seed gwarantuje jednorazowe wygenerowanie)
 if "grid" not in st.session_state:
+    np.random.seed(42)  # Zapewnia stały układ początkowy
     indices = [(r, c) for r in range(ROWS) for c in range(COLS)]
     grid = np.zeros((ROWS, COLS), dtype=int)
     np.random.shuffle(indices)
@@ -28,7 +29,7 @@ if "grid" not in st.session_state:
             
     st.session_state.grid = grid
 
-# 2. Obsługa kliknięcia z adresu URL
+# 2. Zmiana koloru wybranego pola po kliknięciu
 if "cell" in st.query_params:
     try:
         r, c = map(int, st.query_params["cell"].split("_"))
@@ -44,7 +45,7 @@ current_white = (ROWS * COLS) - current_black
 
 st.markdown(f"### 🧩 Mozaika 10x42 | ⬛ {current_black} / 110 | ⬜ {current_white}")
 
-# 3. Wygenerowanie pełnej siatki jako czysty obraz HTML/CSS
+# 3. Wygenerowanie siatki jako czysty obraz HTML/CSS
 grid_flat = st.session_state.grid.flatten()
 cells_html = ""
 
@@ -56,7 +57,6 @@ for idx, val in enumerate(grid_flat):
 
 full_html = f"""
 <style>
-    /* Usuwamy wszystkie niepotrzebne marginesy Streamlita */
     .block-container {{
         padding-top: 1rem !important;
         padding-bottom: 1rem !important;
@@ -64,7 +64,6 @@ full_html = f"""
         padding-right: 0.5rem !important;
     }}
     
-    /* Prawdziwa siatka 10-kolumnowa bez ramek i tabel */
     .mosaic-grid {{
         display: grid;
         grid-template-columns: repeat(10, 1fr);
@@ -76,7 +75,6 @@ full_html = f"""
         border: 2px solid #333333;
     }}
     
-    /* Idealnie kwadratowe komórki */
     .square {{
         display: block;
         width: 100%;
@@ -92,4 +90,4 @@ full_html = f"""
 """
 
 st.markdown(full_html, unsafe_allow_html=True)
-            
+        
