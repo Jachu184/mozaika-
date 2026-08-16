@@ -28,6 +28,9 @@ if "grid" not in st.session_state:
             
     st.session_state.grid = grid
 
+def toggle_square(r, c):
+    st.session_state.grid[r, c] = 1 - st.session_state.grid[r, c]
+
 st.title("🧩 Mozaika 10x42")
 
 current_black = int(np.sum(st.session_state.grid))
@@ -39,90 +42,53 @@ col2.metric("⬜ Białe", f"{current_white} / 310")
 
 st.divider()
 
-# 2. Wygenerowanie interaktywnej siatki HTML/JS
-grid_data = st.session_state.grid.tolist()
+# 2. Stylowanie CSS: wymuszenie zwartej siatki 10 kolumn bez widocznych przerw
+st.markdown("""
+    <style>
+    /* Wymuszenie rzędu 10 kolumn na ekranie telefonu */
+    [data-testid="column"] {
+        width: 10% !important;
+        flex: 1 1 calc(10% - 1px) !important;
+        min-width: 0px !important;
+        padding: 0px !important;
+    }
+    
+    [data-testid="stHorizontalBlock"] {
+        flex-wrap: nowrap !important;
+        gap: 0px !important;
+    }
+    
+    /* Wygląd pojedynczego kwadratu */
+    div.stButton > button {
+        width: 100% !important;
+        height: 28px !important;
+        min-height: 28px !important;
+        padding: 0px !important;
+        margin: 0px !important;
+        border: 1px solid #555555 !important;
+        border-radius: 0px !important;
+        box-sizing: border-box !important;
+    }
+    
+    /* Kolory pól */
+    div.stButton > button[data-testid="stBaseButton-secondary"] {
+        line-height: 0 !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-html_code = f"""
-<!DOCTYPE html>
-<html>
-<head>
-<style>
-    body {{
-        margin: 0;
-        padding: 0;
-        display: flex;
-        justify-content: center;
-        background-color: transparent;
-        user-select: none;
-        -webkit-user-select: none;
-    }}
-    .grid-container {{
-        display: grid;
-        grid-template-columns: repeat({COLS}, 1fr);
-        width: 100%;
-        max-width: 360px;
-        border: 2px solid #333;
-        background-color: #777;
-        gap: 1px;
-    }}
-    .cell {{
-        width: 100%;
-        padding-top: 100%;
-        position: relative;
-        cursor: pointer;
-    }}
-    .cell-inner {{
-        position: absolute;
-        top: 0; left: 0; bottom: 0; right: 0;
-    }}
-    .black {{ background-color: #000000; }}
-    .white {{ background-color: #ffffff; }}
-</style>
-</head>
-<body>
-
-<div class="grid-container" id="mosaic"></div>
-
-<script>
-    function sendToStreamlit(value) {{
-        window.parent.postMessage({{
-            isStreamlit: true,
-            type: "streamlit:setComponentValue",
-            value: value
-        }}, "*");
-    }}
-
-    const gridData = {grid_data};
-    const container = document.getElementById('mosaic');
-
-    gridData.forEach((row, rIdx) => {{
-        row.forEach((val, cIdx) => {{
-            const cell = document.createElement('div');
-            cell.className = 'cell';
-            
-            const inner = document.createElement('div');
-            inner.className = 'cell-inner ' + (val === 1 ? 'black' : 'white');
-            cell.appendChild(inner);
-
-            // Reakcja na dotyk/kliknięcie
-            cell.addEventListener('click', () => {{
-                sendToStreamlit({{r: rIdx, c: cIdx}});
-            }});
-
-            container.appendChild(cell);
-        }});
-    }});
-</script>
-
-</body>
-</html>
-"""
-
-# Renderowanie komponentu HTML
-clicked_cell = st.components.v1.html(html_code, height=1400)
-
-# 3. Bezpieczna obsługa zmiany koloru po kliknięciu
-if isinstance(clicked_cell, dict) and "r" in clicked_cell and "c" in clicked_cell:
-    r, c = clicked_cell["r"], clicked_cell["c"]
-    st.session_state.grid[r, c] = 1 - st.session_state.grid[r, c]
-    st.rerun()
+# 3. Generowanie siatki jako natywne przyciski Streamlit
+for r in range(ROWS):
+    cols = st.columns(COLS)
+    for c in range(COLS):
+        is_black = st.session_state.grid[r, c] == 1
+        # Używamy znaku kwadratu do wypełnienia koloru
+        label = "⬛" if is_black else "⬜"
+        
+        cols[c].button(
+            label=label, 
+            key=f"b_{r}_{c}", 
+            on_click=toggle_square, 
+            args=(r, c)
+        )
+        
