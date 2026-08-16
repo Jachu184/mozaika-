@@ -6,7 +6,7 @@ st.set_page_config(page_title="Mozaika 10x42", layout="centered")
 ROWS, COLS = 42, 10
 TOTAL_BLACK = 110
 
-# 1. Tworzenie stałej siatki początkowej (tylko raz)
+# 1. Tworzenie stałej siatki początkowej (tylko przy pierwszym uruchomieniu)
 if "grid" not in st.session_state:
     np.random.seed(42)
     indices = [(r, c) for r in range(ROWS) for c in range(COLS)]
@@ -29,24 +29,9 @@ if "grid" not in st.session_state:
             
     st.session_state.grid = grid
 
-# 2. Aktualizacja macierzy, jeśli przyszła zmiana z JS
-if "last_toggle" in st.session_state and st.session_state.last_toggle:
-    r, c = st.session_state.last_toggle
-    st.session_state.grid[r, c] = 1 - st.session_state.grid[r, c]
-    st.session_state.last_toggle = None
-
 st.title("🧩 Mozaika 10x42")
 
-current_black = int(np.sum(st.session_state.grid))
-current_white = (ROWS * COLS) - current_black
-
-col1, col2 = st.columns(2)
-col1.metric("⬛ Czarne", f"{current_black} / 110")
-col2.metric("⬜ Białe", f"{current_white} / 310")
-
-st.divider()
-
-# 3. Interaktywna aplikacja w czystym HTML/JS (bez przekierowań w URL)
+# 2. Tworzenie interaktywnego komponentu HTML z dynamicznym licznikiem w JS
 grid_list = st.session_state.grid.tolist()
 
 html_app = f"""
@@ -57,15 +42,37 @@ html_app = f"""
     body {{
         margin: 0;
         padding: 0;
-        display: flex;
-        justify-content: center;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: white;
         background-color: transparent;
+    }}
+    .stats-container {{
+        display: flex;
+        justify-content: space-around;
+        background-color: #1e1e1e;
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        border: 1px solid #333;
+    }}
+    .stat-box {{
+        text-align: center;
+    }}
+    .stat-title {{
+        font-size: 14px;
+        color: #aaa;
+        margin-bottom: 4px;
+    }}
+    .stat-value {{
+        font-size: 20px;
+        font-weight: bold;
     }}
     .mosaic-grid {{
         display: grid;
         grid-template-columns: repeat({COLS}, 1fr);
         width: 100%;
         max-width: 360px;
+        margin: 0 auto;
         background-color: #777777;
         gap: 1px;
         border: 2px solid #333333;
@@ -83,31 +90,57 @@ html_app = f"""
 </head>
 <body>
 
+<div class="stats-container">
+    <div class="stat-box">
+        <div class="stat-title">⬛ Czarne kwadraty</div>
+        <div class="stat-value" id="black-count">110 / 110</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-title">⬜ Białe kwadraty</div>
+        <div class="stat-value" id="white-count">310 / 310</div>
+    </div>
+</div>
+
 <div class="mosaic-grid" id="grid"></div>
 
 <script>
     const gridData = {grid_list};
     const container = document.getElementById('grid');
+    const blackCountEl = document.getElementById('black-count');
+    const whiteCountEl = document.getElementById('white-count');
 
+    let currentBlack = 0;
+    const totalSquares = {ROWS * COLS};
+
+    // Zliczanie początkowe
+    gridData.forEach(row => {{
+        row.forEach(val => {{
+            if (val === 1) currentBlack++;
+        }});
+    }});
+
+    function updateStats() {{
+        blackCountEl.innerText = currentBlack + ' / 110';
+        whiteCountEl.innerText = (totalSquares - currentBlack) + ' / 310';
+    }}
+
+    updateStats();
+
+    // Generowanie siatki
     gridData.forEach((row, r) => {{
         row.forEach((val, c) => {{
             const sq = document.createElement('div');
             sq.className = 'square ' + (val === 1 ? 'black' : 'white');
             
             sq.addEventListener('click', () => {{
-                // Natychmiastowa zmiana koloru wizualnie na ekranie
                 if (sq.classList.contains('black')) {{
                     sq.className = 'square white';
+                    currentBlack--;
                 }} else {{
                     sq.className = 'square black';
+                    currentBlack++;
                 }}
-                
-                // Przekazanie bezpiecznej informacji do Pythona bez zmieniania URL
-                window.parent.postMessage({{
-                    isStreamlit: true,
-                    type: "streamlit:setComponentValue",
-                    value: [r, c]
-                }}, "*");
+                updateStats();
             }});
 
             container.appendChild(sq);
@@ -119,10 +152,4 @@ html_app = f"""
 </html>
 """
 
-# Renderowanie komponentu
-clicked = st.components.v1.html(html_app, height=1350)
-
-# Jeśli kliknięto w pole, zapisujemy zmianę i przeliczamy statystyki
-if clicked and isinstance(clicked, list) and len(clicked) == 2:
-    st.session_state.last_toggle = clicked
-    st.rerun()
+st.components.v1.html(html_app, height=1450)
